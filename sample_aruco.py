@@ -28,6 +28,7 @@ cap.set(cv2.CAP_PROP_FPS, 30)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
+
 def decimal_round(value, digit):
     value_multiply = value * 10 ** digit
     value_float    = value_multiply.astype(int)/( 10 ** digit)
