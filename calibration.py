@@ -54,11 +54,13 @@ print("calculating camera parameter...")
 # Intrinsic parameters
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 
-# Save
-np.save("mtx", mtx)             # Camera Matrix
-np.save("dist", dist.ravel())   # Distortion Matrix
-
 # Show the results
 print("RMS = ", ret)
 print("mtx = \n", mtx)
 print("dist = ", dist.ravel())
+
+# Save
+np.save("mtx", mtx)             # Camera Matrix
+np.save("dist", dist.ravel())   # Distortion Matrix
+
+
