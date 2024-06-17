@@ -34,15 +34,7 @@ def main():
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
     detector = aruco.ArucoDetector(dictionary, parameters)
 
-    # cameraMatrix & dist: lab camera
-    # cameraMatrix = np.array([
-    #     [763.43512892, 0, 321.85994173],
-    #     [0, 764.52495998, 187.09227291],
-    #     [0, 0, 1]],
-    #     dtype='double', )
-    # distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
-
-    # cameraMatrix & dist: mac camera
+    # cameraMatrix & dist for my lab camera
     cameraMatrix = np.array([
         [763.43512892, 0, 321.85994173],
         [0, 764.52495998, 187.09227291],
