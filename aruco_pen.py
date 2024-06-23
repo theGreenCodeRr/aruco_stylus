@@ -1,136 +1,133 @@
 import cv2
 import numpy as np
-from cv2 import aruco
-from math import sqrt
+import cv2.aruco as aruco
+
+# Defining
+aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_250)
+parameters = aruco.DetectorParameters()
+marker_size = 0.017  # 17 mm
+
+# # cameraMatrix & distCoeff: lab camera
+# cameraMatrix = np.array([
+#     [763.43512892, 0, 321.85994173],
+#     [0, 764.52495998, 187.09227291],
+#     [0, 0, 1]],
+#     dtype='double', )
+# distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
+
+# Camera matrix and distortion coefficients: Mac camera
+cameraMatrix = np.array([
+    [826.68182975, 0, 614.71137477],
+    [0, 823.29094599, 355.24928406],
+    [0, 0, 1]],
+    dtype='double', )
+distCoeffs = np.array([[-0.43258492], [3.71129672], [-0.01377461], [0.00989978], [-9.44694337]])
 
 
-def get_dodecahedron_vertices(side_length):
-    phi = (1 + sqrt(5)) / 2  # The golden ratio
-    a = side_length
-    R = a / 2 * sqrt(3) * phi  # Radius of the circumscribed sphere
-
-    # Define the vertices of dodecahedron
-    vertices = [
-        (R, R, R), (R, R, -R), (R, -R, R), (R, -R, -R),
-        (-R, R, R), (-R, R, -R), (-R, -R, R), (-R, -R, -R),
-        (0, a / 2 * phi, a / 2 / sqrt(phi)), (0, a / 2 * phi, -a / 2 / sqrt(phi)),
-        (0, -a / 2 * phi, a / 2 / sqrt(phi)), (0, -a / 2 * phi, -a / 2 / sqrt(phi)),
-        (a / 2 / sqrt(phi), 0, a / 2 * phi), (a / 2 / sqrt(phi), 0, -a / 2 * phi),
-        (-a / 2 / sqrt(phi), 0, a / 2 * phi), (-a / 2 / sqrt(phi), 0, -a / 2 * phi),
-        (a / 2 * phi, a / 2 / sqrt(phi), 0), (a / 2 * phi, -a / 2 / sqrt(phi), 0),
-        (-a / 2 * phi, a / 2 / sqrt(phi), 0), (-a / 2 * phi, -a / 2 / sqrt(phi), 0)
-    ]
-
-    return np.array(vertices, dtype=np.float32)
+# Define the 3D points for the corners
+marker_3d_points = np.array([
+    [-marker_size / 2, marker_size / 2, 0],  # Top-left corner
+    [marker_size / 2, marker_size / 2, 0],   # Top-right corner
+    [marker_size / 2, -marker_size / 2, 0],  # Bottom-right corner
+    [-marker_size / 2, -marker_size / 2, 0]  # Bottom-left corner
+])
 
 
-def get_dodecahedron_center(vertices):
-    # geometric center of a regular dodecahedron is the average of all its vertices
-    center = np.mean(vertices, axis=0)
-    return center
+# Start the camera capture
+cap = cv2.VideoCapture(0)
 
+# Check if the camera opened successfully
+if not cap.isOpened():
+    print("Error: Could not open camera.")
+    exit()
 
-def estimate_pose(corners, marker_size, mtx, distortion):
-    rvecs, tvecs = [], []
-    marker_points = np.array([[-marker_size / 2, marker_size / 2, 0],
-                              [marker_size / 2, marker_size / 2, 0],
-                              [marker_size / 2, -marker_size / 2, 0],
-                              [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
+# Set of marker IDs we want to find (from 1 to 12)
+desired_marker_ids = set(range(1, 13))
 
-    for corner in corners:
-        retval, rvec, tvec = cv2.solvePnP(marker_points, corner, mtx, distortion)
-        rvecs.append(rvec)
-        tvecs.append(tvec)
-    return rvecs, tvecs
+# Dictionary to store the corners of each detected marker [marker_id: 2d corners, 3d points]
+marker_corners_dict_2d = {}
+marker_corners_dict_3d = {}
 
-
-def average_rotation_vectors(rvecs):
-    # Convert rotation vectors to rotation matrices
-    rotation_matrices = [cv2.Rodrigues(rvec)[0] for rvec in rvecs]
-    # Average the rotation matrices
-    avg_rotation_matrix = np.mean(rotation_matrices, axis=0)
-    # Convert the average rotation matrix back to a rotation vector
-    avg_rvec, _ = cv2.Rodrigues(avg_rotation_matrix)
-    return avg_rvec
-
-
-def main():
-    cap = cv2.VideoCapture(0)
-    dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_250)
-    parameters = aruco.DetectorParameters()
-    marker_size = 0.017  # Marker size in meters
-
-    # # cameraMatrix & distCoeff: lab camera
-    # cameraMatrix = np.array([
-    #     [763.43512892, 0, 321.85994173],
-    #     [0, 764.52495998, 187.09227291],
-    #     [0, 0, 1]],
-    #     dtype='double', )
-    # distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
-
-    # Camera matrix and distortion coefficients: mac camera
-    cameraMatrix = np.array([
-        [826.68182975, 0, 614.71137477],
-        [0, 823.29094599, 355.24928406],
-        [0, 0, 1]],
-        dtype='double', )
-    distCoeffs = np.array([[-0.43258492], [3.71129672], [-0.01377461], [0.00989978], [-9.44694337]])
-
-    # Calculate the geometric center of the dodecahedron
-    side_length = 20  # Side length of the dodecahedron in mm
-    dodecahedron_vertices = get_dodecahedron_vertices(side_length)
-    dodecahedron_center = get_dodecahedron_center(dodecahedron_vertices)
-
+try:
     while True:
+        # Capture frame-by-frame
         ret, frame = cap.read()
         if not ret:
-            print("Failed to capture frame")
+            print("Error: Can't receive frame (stream end?). Exiting ...")
             break
 
-        # Detect Aruco markers in the frame
-        corners, ids, rejectedImgPoints = aruco.detectMarkers(frame, dictionary, parameters=parameters)
+        # Convert the frame to grayscale
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Detect the markers in the grayscale frame
+        corners, ids, rejected = aruco.detectMarkers(gray_frame, aruco_dict, parameters=parameters)
+
+        # Variables to store the sum of all marker centers
+        sum_center_x = 0
+        sum_center_y = 0
+        num_markers = 0
 
         # If at least one marker detected
         if ids is not None and len(ids) > 0:
-            # Draw the detected markers
-            aruco.drawDetectedMarkers(frame, corners, ids)
+            ids = ids.flatten()
+            # print(f"Detected marker IDs: {ids}")
 
-            # Estimate pose of each marker
-            rvecs, tvecs = estimate_pose(corners, marker_size, cameraMatrix, distCoeffs)
+            for i, marker_id in enumerate(ids):
+                # Convert marker_id to an integer if it's a NumPy array
+                if isinstance(marker_id, np.ndarray):
+                    marker_id = marker_id.item()  # Converts to integer
 
-            # Calculate the average rotation vector
-            avg_rvec = average_rotation_vectors(rvecs)
+                # Check if the marker_id is within the desired range
+                if marker_id in desired_marker_ids:
+                    # Add the detected marker's corners to the dictionary
+                    marker_corners_dict_2d[marker_id] = corners[i].tolist()
+                    marker_corners_dict_3d[marker_id] = marker_3d_points.tolist()
 
-            # The geometric center is used directly for the translation vector
-            central_tvec = dodecahedron_center.reshape(-1, 1)
+                    # # Calculate the center of the current marker
+                    # center_x = np.mean(corners[i][:, 0])
+                    # center_y = np.mean(corners[i][:, 1])
+                    #
+                    # # Add to the sum of centers
+                    # sum_center_x += center_x
+                    # sum_center_y += center_y
+                    # num_markers += 1
+                    #
+                    # # Calculate the average center of all markers
+                    #
+                    # avg_center_x = sum_center_x / num_markers
+                    # avg_center_y = sum_center_y / num_markers
+                    #
+                    # # Define the average center in 2D and 3D space
+                    # avg_center_2d = np.array([[avg_center_x, avg_center_y]], dtype=np.float32)
+                    # avg_center_3d = np.array([[0, 0, 0]],
+                    #                          dtype=np.float32)  # Assuming the center is at the origin in 3D space
+                    #
+                    # # Use solvePnP to estimate the pose at the average center
+                    # success, rvec, tvec = cv2.solvePnP(avg_center_3d, avg_center_2d, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_IPPE_SQUARE)
 
-            # # Project the geometric center onto the 2D image plane
-            # projected_center, _ = cv2.projectPoints(central_tvec, avg_rvec, np.zeros((3, 1)), cameraMatrix, distCoeffs)
+                    # Proceed with pose estimation using solvePnP
+                    corners_2d = np.squeeze(marker_corners_dict_2d[marker_id])
+                    corners_3d = np.array(marker_corners_dict_3d[marker_id], dtype=np.float32)
 
-            # After calculating the average rotation vector and central translation vector
-            avg_rmat, _ = cv2.Rodrigues(avg_rvec)
-            transformed_center = np.dot(avg_rmat, dodecahedron_center.reshape(-1, 1)) + central_tvec
+                    # Use solvePnP to estimate pose
+                    success, rvec, tvec = cv2.solvePnP(corners_3d, corners_2d, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_IPPE_SQUARE)
 
-            # Now use tvec for the translation vector in drawFrameAxes
-            frame = cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, avg_rvec, transformed_center, 0.01)
-        else:
-            print("No markers detected")
+                    if success:
+                        # Draw the axes on the marker
+                        aruco.drawDetectedMarkers(frame, corners, ids) # Draw the detected markers
+                        cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, rvec, tvec, 0.1)
+                    else:
+                        print("Pose estimation failed for the average center.")
 
-        # Display the frame
-        cv2.imshow('Frame', frame)
+            # Display the resulting frame
+            cv2.imshow('Frame', frame)
 
-        # Break the loop if 'q' is pressed
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            # Break the loop if 'q' key is pressed
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
-    # Release the video capture object and close all windows
+finally:
+    # When everything done, release the capture
     cap.release()
     cv2.destroyAllWindows()
 
-
-if __name__ == '__main__':
-    main()
-
-# known issue >>>>
-# frame frezze
-# center of dodecahedron is in the center of the frame don't move with detected marker

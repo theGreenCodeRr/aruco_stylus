@@ -1,0 +1,18 @@
+    # cameraMatrix & distCoeff: lab camera
+     cameraMatrix = np.array([
+         [763.43512892, 0, 321.85994173],
+         [0, 764.52495998, 187.09227291],
+         [0, 0, 1]],
+         dtype='double', )
+     distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
+
+
+
+    # Camera matrix and distortion coefficients: Mac camera
+    cameraMatrix = np.array([
+        [826.68182975, 0, 614.71137477],
+        [0, 823.29094599, 355.24928406],
+        [0, 0, 1]],
+        dtype='double', )
+    distCoeffs = np.array([[-0.43258492], [3.71129672], [-0.01377461], [0.00989978], [-9.44694337]])
+
