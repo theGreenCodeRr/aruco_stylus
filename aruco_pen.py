@@ -1,133 +1,174 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*
 import cv2
+from cv2 import aruco
 import numpy as np
-import cv2.aruco as aruco
-
-# Defining
-aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_250)
-parameters = aruco.DetectorParameters()
-marker_size = 0.017  # 17 mm
-
-# # cameraMatrix & distCoeff: lab camera
-# cameraMatrix = np.array([
-#     [763.43512892, 0, 321.85994173],
-#     [0, 764.52495998, 187.09227291],
-#     [0, 0, 1]],
-#     dtype='double', )
-# distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
-
-# Camera matrix and distortion coefficients: Mac camera
-cameraMatrix = np.array([
-    [826.68182975, 0, 614.71137477],
-    [0, 823.29094599, 355.24928406],
-    [0, 0, 1]],
-    dtype='double', )
-distCoeffs = np.array([[-0.43258492], [3.71129672], [-0.01377461], [0.00989978], [-9.44694337]])
+import pandas as pd
+from collections import deque
+from utils import util_draw # Draw using PyQtGraph
 
 
-# Define the 3D points for the corners
-marker_3d_points = np.array([
-    [-marker_size / 2, marker_size / 2, 0],  # Top-left corner
-    [marker_size / 2, marker_size / 2, 0],   # Top-right corner
-    [marker_size / 2, -marker_size / 2, 0],  # Bottom-right corner
-    [-marker_size / 2, -marker_size / 2, 0]  # Bottom-left corner
-])
+# Setup the web camera
+def setup_web_camera():
+    # Open the webcam (built-in camera)
+    cap = cv2.VideoCapture(0)
+    # Camera setting --- Change it with yours
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    # cameraMatrix & distCoeff: lab camera
+    cameraMatrix = np.array([
+        [763.43512892, 0, 321.85994173],
+        [0, 764.52495998, 187.09227291],
+        [0, 0, 1]],
+        dtype='double', )
+    distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
+    return cap, cameraMatrix, distCoeffs
 
 
-# Start the camera capture
-cap = cv2.VideoCapture(0)
+# Set up the Aruco
+def setup_aruco():
+    # Set up the Aruco dictionary
+    dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+    parameters = aruco.DetectorParameters()
+    # Change below value to match with the actual marker size
+    marker_size = 0.014  # in meter
+    # Process markers' corners at subpixels
+    parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+    detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+    return detector, marker_size
 
-# Check if the camera opened successfully
-if not cap.isOpened():
-    print("Error: Could not open camera.")
-    exit()
 
-# Set of marker IDs we want to find (from 1 to 12)
-desired_marker_ids = set(range(1, 13))
+# Estimate the pose information for each marker
+def estimatePoseLocal(corner, marker_size, cameraMatrix, distCoeffs):
+    marker_points = np.array([[-marker_size / 2, marker_size / 2, 0],
+                              [marker_size / 2, marker_size / 2, 0],
+                              [marker_size / 2, -marker_size / 2, 0],
+                              [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
+    trash, rvecs, tvecs = cv2.solvePnP(marker_points, corner, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_ITERATIVE)
+    return rvecs, tvecs, trash
 
-# Dictionary to store the corners of each detected marker [marker_id: 2d corners, 3d points]
-marker_corners_dict_2d = {}
-marker_corners_dict_3d = {}
 
-try:
-    while True:
-        # Capture frame-by-frame
+# Estimate the global information of the dodecahedron from detected markers
+def estimatePoseGlobal(model_points, image_points, cameraMatrix, distCoeffs):
+    trash, rvecs, tvecs = cv2.solvePnP(model_points, image_points, cameraMatrix, distCoeffs, False,
+                                       cv2.SOLVEPNP_ITERATIVE)
+    return rvecs, tvecs, trash
+
+
+def main():
+    # Setup the web camera --------------------------------
+    cap, cameraMatrix, distCoeffs = setup_web_camera()
+    ret, frame = cap.read()
+
+    # Setup the Aruco marker ------------------------------
+    detector, marker_size = setup_aruco()
+
+    # Read Dodecahedron 3D coordinates --------------------
+    data = pd.read_csv('markers/model_points_4x4.csv')  # Modified annotation (adjusted to each marker)
+    row, column = data.shape  # Check the number of row & column
+    # Put data into a 2D-list
+    cols_to_combine = ['x', 'y', 'z']
+    model_points_2d_list = data[cols_to_combine].values.tolist()
+    # Convert a 2D list to a 3D list using K-slice
+    # initializing K-Slicing method
+    K = 4  # Number of 2D data in a group
+    tmp1 = iter(model_points_2d_list)
+    tmp2 = [tmp1] * K
+    model_points_3d_list = [list(ele) for ele in zip(*tmp2)]
+
+    # Initialize the variable ----------------------------
+    global_pose = True
+    plot_pen_tip = False
+
+    while ret == True:
+
         ret, frame = cap.read()
-        if not ret:
-            print("Error: Can't receive frame (stream end?). Exiting ...")
-            break
+        corners, ids, rejectedImgPoints = detector.detectMarkers(frame)
+        aruco.drawDetectedMarkers(frame, corners, ids, (0, 255, 0))
 
-        # Convert the frame to grayscale
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Use deque to append (faster)
+        image_points_2d = deque()
+        model_points_3d = deque()
+        for i, corner in enumerate(corners):
 
-        # Detect the markers in the grayscale frame
-        corners, ids, rejected = aruco.detectMarkers(gray_frame, aruco_dict, parameters=parameters)
+            # Draw polylines (edge)
+            points = corner[0].astype(np.int32)
+            cv2.polylines(frame, [points], True, (0, 255, 255))
 
-        # Variables to store the sum of all marker centers
-        sum_center_x = 0
-        sum_center_y = 0
-        num_markers = 0
+            # Draw marker IDs
+            cv2.putText(frame, str(ids[i][0]), tuple(points[0]), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 1)
 
-        # If at least one marker detected
-        if ids is not None and len(ids) > 0:
-            ids = ids.flatten()
-            # print(f"Detected marker IDs: {ids}")
+            # Draw marker corner no.
+            for j in range(1, 4):
+                cv2.putText(frame, str(j), points[j], cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
 
-            for i, marker_id in enumerate(ids):
-                # Convert marker_id to an integer if it's a NumPy array
-                if isinstance(marker_id, np.ndarray):
-                    marker_id = marker_id.item()  # Converts to integer
+            # Calculate the local pose of each AR marker
+            rvecs, tvecs, _objPoints = estimatePoseLocal(corner, marker_size, cameraMatrix, distCoeffs)
+            if not global_pose:
+                cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, rvecs, tvecs, 0.01)
+                overlay = frame.copy()
+                # A filled line
+                cv2.line(overlay, (20, 20), (250, 20), (0, 255, 0), 40)
+                # Transparency factor.
+                alpha = 0.4
+                cv2.putText(frame, 'Mode: Local Pose Estimation', (20, 25),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
 
-                # Check if the marker_id is within the desired range
-                if marker_id in desired_marker_ids:
-                    # Add the detected marker's corners to the dictionary
-                    marker_corners_dict_2d[marker_id] = corners[i].tolist()
-                    marker_corners_dict_3d[marker_id] = marker_3d_points.tolist()
+            # Calculate only for #ID < 12
+            # to avoid wrong ID detection
+            if (ids[i][0] < 12):
+                # Collect image points
+                for j in range(4):
+                    image_points_2d.append(corner[0][j].tolist())
+                # Collect model points
+                for j in range(4):
+                    model_points_3d.append(model_points_3d_list[ids[i][0]][j])
 
-                    # # Calculate the center of the current marker
-                    # center_x = np.mean(corners[i][:, 0])
-                    # center_y = np.mean(corners[i][:, 1])
-                    #
-                    # # Add to the sum of centers
-                    # sum_center_x += center_x
-                    # sum_center_y += center_y
-                    # num_markers += 1
-                    #
-                    # # Calculate the average center of all markers
-                    #
-                    # avg_center_x = sum_center_x / num_markers
-                    # avg_center_y = sum_center_y / num_markers
-                    #
-                    # # Define the average center in 2D and 3D space
-                    # avg_center_2d = np.array([[avg_center_x, avg_center_y]], dtype=np.float32)
-                    # avg_center_3d = np.array([[0, 0, 0]],
-                    #                          dtype=np.float32)  # Assuming the center is at the origin in 3D space
-                    #
-                    # # Use solvePnP to estimate the pose at the average center
-                    # success, rvec, tvec = cv2.solvePnP(avg_center_3d, avg_center_2d, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_IPPE_SQUARE)
+        if ids is not None:
+            # Convert to numpy array
+            tmp = np.array(image_points_2d)
+            image_points = tmp[np.newaxis, :]
+            model_points = np.array(model_points_3d)
+            if len(model_points >= 4):
+                rvecs_global, tvecs_global, _objPoints = estimatePoseGlobal(model_points, image_points, cameraMatrix,
+                                                                            distCoeffs)
+                (rotation_matrix, jacobian) = cv2.Rodrigues(rvecs_global)
 
-                    # Proceed with pose estimation using solvePnP
-                    corners_2d = np.squeeze(marker_corners_dict_2d[marker_id])
-                    corners_3d = np.array(marker_corners_dict_3d[marker_id], dtype=np.float32)
+                # Calculate the global pose of the dodecahedron
+                if global_pose:
+                    # Draw Axis, Line, Text
+                    cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, rvecs_global, tvecs_global, 50)
+                    overlay = frame.copy()
+                    # A filled line
+                    cv2.line(overlay, (20, 20), (250, 20), (255, 255, 0), 40)
+                    # Transparency factor.
+                    alpha = 0.4
+                    cv2.putText(frame, 'Mode: Global Pose Estimation', (20, 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                    frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
 
-                    # Use solvePnP to estimate pose
-                    success, rvec, tvec = cv2.solvePnP(corners_3d, corners_2d, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_IPPE_SQUARE)
+                    # Calculate and draw the trajectory of the 3D pen tip
+                    if plot_pen_tip:
+                        pen_tip_loc = np.array([[-0.014943], [-65.6512], [85.2906]])  # 3x1 array
+                        pen_tip_loc_world = rotation_matrix @ pen_tip_loc + tvecs_global
+                        pen_tip_loc_world = pen_tip_loc_world / 25
+                        new_pen = np.transpose(pen_tip_loc_world)
+                        # Below is just for visualiization purposes
+                        x = -1.5 * new_pen[0][0] - 10
+                        y = -2.0 * new_pen[0][1]
+                        z = 1.5 * new_pen[0][2] - 20
+                        new_pen[0] = (x, z, y)
+                        util_draw.plot_dodecahedron(frame, new_pen, 20)
+        global_pose, plot_pen_tip = util_draw.draw_image(frame)
 
-                    if success:
-                        # Draw the axes on the marker
-                        aruco.drawDetectedMarkers(frame, corners, ids) # Draw the detected markers
-                        cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, rvec, tvec, 0.1)
-                    else:
-                        print("Pose estimation failed for the average center.")
-
-            # Display the resulting frame
-            cv2.imshow('Frame', frame)
-
-            # Break the loop if 'q' key is pressed
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-
-finally:
-    # When everything done, release the capture
     cap.release()
-    cv2.destroyAllWindows()
 
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass

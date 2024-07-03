@@ -1,12 +1,12 @@
-# https://qiita.com/ReoNagai/items/5da95dea149c66ddbbdd
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 
+# Change it with yours
 square_size = 1.8       # Mesh size (in cm)
 pattern_size = (7, 7)   # Number of interception points
-
 reference_img = 40      # Number of images to be captured
 
 pattern_points = np.zeros( (np.prod(pattern_size), 3), np.float32 ) # Chessboard coordinate (X,Y,Z) with (Z=0)
@@ -15,8 +15,7 @@ pattern_points *= square_size
 objpoints = []
 imgpoints = []
 
-# Capture
-
+# Capture --- Change it with yours
 width = 640
 height = 480
 capture = cv2.VideoCapture(0)
@@ -54,13 +53,11 @@ print("calculating camera parameter...")
 # Intrinsic parameters
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 
+# Save
+np.save("Camera Matrix", mtx)             # Camera Matrix
+np.save("Distortion Coefficient", dist.ravel())   # Distortion Matrix
+
 # Show the results
 print("RMS = ", ret)
 print("mtx = \n", mtx)
 print("dist = ", dist.ravel())
-
-# Save
-np.save("mtx", mtx)             # Camera Matrix
-np.save("dist", dist.ravel())   # Distortion Matrix
-
-
