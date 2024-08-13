@@ -1,47 +1,38 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*
 import cv2
 from cv2 import aruco
 import numpy as np
 import pandas as pd
 from collections import deque
-from utils import util_draw # Draw using PyQtGraph
+from utils import util_draw_custom  # Draw using PyQtGraph
 
 
-# Setup the web camera
 def setup_web_camera():
-    # Open the webcam (built-in camera)
     cap = cv2.VideoCapture(0)
-    # Camera setting --- Change it with yours
     cap.set(cv2.CAP_PROP_FPS, 30)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # cameraMatrix & distCoeff: lab camera
-    cameraMatrix = np.array([
-        [763.43512892, 0, 321.85994173],
-        [0, 764.52495998, 187.09227291],
-        [0, 0, 1]],
-        dtype='double', )
-    distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
+    # cameraMatrix & distCoeff: global shutter camera
+    cameraMatrix = np.array(
+        [[310.07377276, 0, 327.61147809],
+         [0, 317.96132742, 241.34942767],
+         [0, 0, 1]],
+        dtype='double')
+    distCoeffs = np.array([[-0.19592466], [0.73208373], [0.02037363], [-0.02853563], [-1.00689196]])
     return cap, cameraMatrix, distCoeffs
 
 
-# Set up the Aruco
 def setup_aruco():
     # Set up the Aruco dictionary
     dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters()
-    # Change below value to match with the actual marker size
-    marker_size = 0.014  # in meter
-    # Process markers' corners at subpixels
+    marker_size = 0.016  # 16mm
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
     return detector, marker_size
 
 
-# Estimate the pose information for each marker
-def estimatePoseLocal(corner, marker_size, cameraMatrix, distCoeffs):
+def estimatePoseLocal(corner, marker_size, cameraMatrix, distCoeffs):  # for individual marker
     marker_points = np.array([[-marker_size / 2, marker_size / 2, 0],
                               [marker_size / 2, marker_size / 2, 0],
                               [marker_size / 2, -marker_size / 2, 0],
@@ -58,11 +49,8 @@ def estimatePoseGlobal(model_points, image_points, cameraMatrix, distCoeffs):
 
 
 def main():
-    # Setup the web camera --------------------------------
     cap, cameraMatrix, distCoeffs = setup_web_camera()
     ret, frame = cap.read()
-
-    # Setup the Aruco marker ------------------------------
     detector, marker_size = setup_aruco()
 
     # Read Dodecahedron 3D coordinates --------------------
@@ -78,13 +66,14 @@ def main():
     tmp2 = [tmp1] * K
     model_points_3d_list = [list(ele) for ele in zip(*tmp2)]
 
-    # Initialize the variable ----------------------------
     global_pose = True
     plot_pen_tip = False
 
     while ret == True:
-
         ret, frame = cap.read()
+        # #frame = filterrinhIm(frame)
+        # retq, thresh1 = cv2.threshold(frame, 50, 255, cv2.THRESH_BINARY)
+        # cv2.imshow("test", thresh1)
         corners, ids, rejectedImgPoints = detector.detectMarkers(frame)
         aruco.drawDetectedMarkers(frame, corners, ids, (0, 255, 0))
 
@@ -117,9 +106,8 @@ def main():
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                 frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
 
-            # Calculate only for #ID < 12
-            # to avoid wrong ID detection
-            if (ids[i][0] < 12):
+            # Calculate only for #ID < 12 (avoid wrong ID detection)
+            if ids[i][0] < 12:
                 # Collect image points
                 for j in range(4):
                     image_points_2d.append(corner[0][j].tolist())
@@ -161,9 +149,8 @@ def main():
                         y = -2.0 * new_pen[0][1]
                         z = 1.5 * new_pen[0][2] - 20
                         new_pen[0] = (x, z, y)
-                        util_draw.plot_dodecahedron(frame, new_pen, 20)
-        global_pose, plot_pen_tip = util_draw.draw_image(frame)
-
+                        util_draw_custom.plot_dodecahedron(frame, new_pen, 20)
+        global_pose, plot_pen_tip = util_draw_custom.draw_image(frame)
     cap.release()
 
 
