@@ -12,13 +12,29 @@ def setup_web_camera():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # cameraMatrix & distCoeff: global shutter camera
+    # # cameraMatrix & distCoeffs: global shutter camera
+    # cameraMatrix = np.array(
+    #     [[505.1150576, 0, 359.14439401],
+    #      [0, 510.33530166, 230.33963591],
+    #      [0, 0, 1]],
+    #     dtype='double')
+    # distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062]])
+
+    # mac webcam
     cameraMatrix = np.array(
-        [[310.07377276, 0, 327.61147809],
-         [0, 317.96132742, 241.34942767],
-         [0, 0, 1]],
+        [
+            [581.2490064821088, 0.0, 305.2885321972521],
+            [0.0, 587.6316817762934, 288.9932758741485],
+            [0.0, 0.0, 1.0], ],
         dtype='double')
-    distCoeffs = np.array([[-0.19592466], [0.73208373], [0.02037363], [-0.02853563], [-1.00689196]])
+    distCoeffs = np.array(
+        [
+            [-0.31329614267146066],
+            [0.8386295742029726],
+            [-0.0024210244191179104],
+            [0.016349338905846198],
+            [-1.133637004544031], ],
+        dtype='double')
     return cap, cameraMatrix, distCoeffs
 
 
@@ -43,8 +59,7 @@ def estimatePoseLocal(corner, marker_size, cameraMatrix, distCoeffs):  # for ind
 
 # Estimate the global information of the dodecahedron from detected markers
 def estimatePoseGlobal(model_points, image_points, cameraMatrix, distCoeffs):
-    trash, rvecs, tvecs = cv2.solvePnP(model_points, image_points, cameraMatrix, distCoeffs, False,
-                                       cv2.SOLVEPNP_ITERATIVE)
+    trash, rvecs, tvecs = cv2.solvePnP(model_points, image_points, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_ITERATIVE)
     return rvecs, tvecs, trash
 
 
@@ -52,8 +67,7 @@ def main():
     cap, cameraMatrix, distCoeffs = setup_web_camera()
     ret, frame = cap.read()
     detector, marker_size = setup_aruco()
-
-    # Read Dodecahedron 3D coordinates --------------------
+    # Read Dodecahedron 3D coordinates
     data = pd.read_csv('markers/model_points_4x4.csv')  # Modified annotation (adjusted to each marker)
     row, column = data.shape  # Check the number of row & column
     # Put data into a 2D-list

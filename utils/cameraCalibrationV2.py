@@ -1,75 +1,102 @@
 import cv2
 import numpy as np
 
-# Termination criteria for corner sub-pixel accuracy
-criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+# Chessboard size
+square_size = 20  # Mesh size (in mm)
+pattern_size = (7, 7)  # Number of interception points
+reference_img = 40  # Number of images to be captured
 
-# Prepare object points for a 7x7 chessboard pattern with 20mm squares
-square_size = 20  # 20mm squares
-objp = np.zeros((7 * 7, 3), np.float32)
-objp[:, :2] = np.mgrid[0:7, 0:7].T.reshape(-1, 2) * square_size
+# Chessboard coordinates (X, Y, Z) with Z=0
+pattern_points = np.zeros((np.prod(pattern_size), 3), np.float32)
+pattern_points[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
+pattern_points *= square_size
 
-# Arrays to store object points and image points from all the images
 objpoints = []  # 3D points in real world space
 imgpoints = []  # 2D points in image plane
 
-# Start capturing video from the first camera
-cap = cv2.VideoCapture(0)
+# Set camera resolution
+width = 640
+height = 480
+capture = cv2.VideoCapture(0)
+capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
-while len(objpoints) < 50:  # Capture at least 15 valid frames
-    ret, frame = cap.read()
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert frame to grayscale
+while len(objpoints) < reference_img:  # Capture specified number of images
+    ret, img = capture.read()
+    if not ret:
+        print("Failed to capture image")
+        continue
 
-    # Find the chessboard corners
-    ret, corners = cv2.findChessboardCorners(gray, (7, 7), None)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # Convert frame to grayscale
+
+    # Detect corners of the chessboard
+    ret, corner = cv2.findChessboardCorners(gray, pattern_size)
 
     if ret:
-        objpoints.append(objp)
-
-        # Refine corner locations to sub-pixel accuracy
-        corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
-        imgpoints.append(corners2)
+        print(f"Detected corner {len(objpoints) + 1}/{reference_img}")
+        term = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_COUNT, 30, 0.1)
+        cv2.cornerSubPix(gray, corner, (5, 5), (-1, -1), term)
+        imgpoints.append(corner.reshape(-1, 2))
+        objpoints.append(pattern_points)
 
         # Draw and display the corners
-        cv2.drawChessboardCorners(frame, (7, 7), corners2, ret)
+        cv2.drawChessboardCorners(img, pattern_size, corner, ret)
 
-    cv2.imshow('frame', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):  # Exit when 'q' key is pressed
+    cv2.imshow('image', img)
+    if cv2.waitKey(200) & 0xFF == ord('q'):  # Wait for 200 ms for the next image
         break
 
-cap.release()
+capture.release()
 cv2.destroyAllWindows()
 
-# Perform camera calibration to get the camera matrix and distortion coefficients
-ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
+if len(objpoints) < reference_img:
+    print("Not enough corner points detected for calibration")
+else:
+    print("Calculating camera parameters...")
 
-# Print the formatted camera matrix and distortion coefficients
-cameraMatrix = np.array([
-    [1726.08307, 0, 623.477513],
-    [0, 1737.78697, 379.475766],
-    [0, 0, 1]],
-    dtype='double'
-)
+    # Intrinsic parameters
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 
-distCoeffs = np.array([[-1.36772144], [27.480739], [-0.0307059996], [0.00539878234], [-263.256716]],
-                      dtype='double'
-                      )
+    # Print the formatted camera matrix and distortion coefficients
+    cameraMatrix = np.array([
+        [mtx[0, 0], 0, mtx[0, 2]],
+        [0, mtx[1, 1], mtx[1, 2]],
+        [0, 0, 1]
+    ], dtype='double')
 
-print("cameraMatrix =", cameraMatrix)
-print("distCoeffs =", distCoeffs)
+    distCoeffs = np.array([dist[0, 0], dist[0, 1], dist[0, 2], dist[0, 3], dist[0, 4]], dtype='double').reshape(-1, 1)
 
-# #mac webcam
-# cameraMatrix = np.array([
-#     [1726.08307, 0, 623.477513],
-#     [0, 1737.78697, 379.475766],
-#     [0, 0, 1]],
-#     dtype='double'
-# )
-#
-# distCoeffs = np.array([[-1.36772144], [27.480739], [-0.0307059996], [0.00539878234], [-263.256716]],
-#     dtype='double'
-# )
+    print("cameraMatrix = np.array(")
+    print("    [")
+    for row in cameraMatrix:
+        print(f"        [{', '.join(map(str, row))}],")
+    print("    ],")
+    print("    dtype='double'")
+    print(")")
 
-# lab shutterCam
+    print("distCoeffs = np.array(")
+    print("    [")
+    for coeff in distCoeffs:
+        print(f"        [{coeff[0]}],")
+    print("    ],")
+    print("    dtype='double'")
+    print(")")
+
+# globalShutterCam
 
 
+#  # mac webcam
+# cameraMatrix = np.array(
+#     [
+#         [581.2490064821088, 0.0, 305.2885321972521],
+#         [0.0, 587.6316817762934, 288.9932758741485],
+#         [0.0, 0.0, 1.0],],
+#     dtype='double')
+# distCoeffs = np.array(
+#     [
+#         [-0.31329614267146066],
+#         [0.8386295742029726],
+#         [-0.0024210244191179104],
+#         [0.016349338905846198],
+#         [-1.133637004544031],],
+#     dtype='double')
