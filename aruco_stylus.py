@@ -205,7 +205,7 @@ def main():
                         pen_tip_loc_world = rotation_matrix @ pen_tip_loc + tvecs_global
                         pen_tip_loc_world = pen_tip_loc_world / 25
                         new_pen = np.transpose(pen_tip_loc_world)
-                        # Below is just for visualiization purposes
+                        # Below is just for visualization purposes
                         x = -1.5 * new_pen[0][0] - 10
                         y = -2.0 * new_pen[0][1]
                         z = 1.5 * new_pen[0][2] - 20
