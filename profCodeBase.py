@@ -12,29 +12,29 @@ def setup_web_camera():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # # cameraMatrix & distCoeffs: global shutter camera
-    # cameraMatrix = np.array(
-    #     [[505.1150576, 0, 359.14439401],
-    #      [0, 510.33530166, 230.33963591],
-    #      [0, 0, 1]],
-    #     dtype='double')
-    # distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062]])
-
-    # mac webcam
+    # cameraMatrix & distCoeffs: global shutter camera
     cameraMatrix = np.array(
-        [
-            [581.2490064821088, 0.0, 305.2885321972521],
-            [0.0, 587.6316817762934, 288.9932758741485],
-            [0.0, 0.0, 1.0], ],
+        [[505.1150576, 0, 359.14439401],
+         [0, 510.33530166, 230.33963591],
+         [0, 0, 1]],
         dtype='double')
-    distCoeffs = np.array(
-        [
-            [-0.31329614267146066],
-            [0.8386295742029726],
-            [-0.0024210244191179104],
-            [0.016349338905846198],
-            [-1.133637004544031], ],
-        dtype='double')
+    distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062],], dtype='double')
+
+    # # mac webcam
+    # cameraMatrix = np.array(
+    #     [
+    #         [581.2490064821088, 0.0, 305.2885321972521],
+    #         [0.0, 587.6316817762934, 288.9932758741485],
+    #         [0.0, 0.0, 1.0], ],
+    #     dtype='double')
+    # distCoeffs = np.array(
+    #     [
+    #         [-0.31329614267146066],
+    #         [0.8386295742029726],
+    #         [-0.0024210244191179104],
+    #         [0.016349338905846198],
+    #         [-1.133637004544031], ],
+    #     dtype='double')
     return cap, cameraMatrix, distCoeffs
 
 
@@ -158,7 +158,7 @@ def main():
                         pen_tip_loc_world = rotation_matrix @ pen_tip_loc + tvecs_global
                         pen_tip_loc_world = pen_tip_loc_world / 25
                         new_pen = np.transpose(pen_tip_loc_world)
-                        # Below is just for visualiization purposes
+                        # Below is just for visualization purposes
                         x = -1.5 * new_pen[0][0] - 10
                         y = -2.0 * new_pen[0][1]
                         z = 1.5 * new_pen[0][2] - 20

@@ -5,30 +5,23 @@ import math
 
 
 def camera_setup():
-    """Initialize the camera and set the intrinsic parameters."""
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FPS, 30)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # Camera calibration parameters (example for a Mac webcam)
-    cameraMatrix = np.array([
-        [581.2490064821088, 0.0, 305.2885321972521],
-        [0.0, 587.6316817762934, 288.9932758741485],
-        [0.0, 0.0, 1.0]], dtype='double')
-
-    distCoeffs = np.array([
-        [-0.31329614267146066],
-        [0.8386295742029726],
-        [-0.0024210244191179104],
-        [0.016349338905846198],
-        [-1.133637004544031]], dtype='double')
+    # cameraMatrix & distCoeffs: global shutter camera
+    cameraMatrix = np.array(
+        [[505.1150576, 0, 359.14439401],
+         [0, 510.33530166, 230.33963591],
+         [0, 0, 1]],
+        dtype='double')
+    distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062],], dtype='double')
 
     return cap, cameraMatrix, distCoeffs
 
 
 def aruco_setup():
-    """Setup ArUco marker dictionary and detection parameters."""
     dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters()
     marker_size = 0.059  # Marker size in meters
@@ -38,7 +31,6 @@ def aruco_setup():
 
 
 def pose_estimation(corner, marker_size, cameraMatrix, distCoeffs):
-    """Estimate the pose of the ArUco marker."""
     marker_points = np.array([
         [-marker_size / 2, marker_size / 2, 0],
         [marker_size / 2, marker_size / 2, 0],
@@ -59,7 +51,6 @@ def pose_estimation(corner, marker_size, cameraMatrix, distCoeffs):
 
 
 def calculate_euler_angles(rvec):
-    """Convert rotation vector to Euler angles."""
     R, _ = cv2.Rodrigues(rvec)
     sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
     singular = sy < 1e-6
@@ -77,7 +68,6 @@ def calculate_euler_angles(rvec):
 
 
 def display_marker_info(frame, rvec, tvec, font):
-    """Display distance, angle, and 3D position information on the frame."""
     # Calculate Euler angles (yaw, pitch, roll)
     angles = calculate_euler_angles(rvec)
 
@@ -95,7 +85,6 @@ def display_marker_info(frame, rvec, tvec, font):
 
 
 def draw_detected_markers(frame, corners, ids):
-    """Draw markers and IDs on the frame."""
     aruco.drawDetectedMarkers(frame, corners, ids, (0, 255, 0))
     for i, corner in enumerate(corners):
         points = corner[0].astype(np.int32)
@@ -104,7 +93,6 @@ def draw_detected_markers(frame, corners, ids):
 
 
 def draw_marker_axes(frame, cameraMatrix, distCoeffs, rvec, tvec):
-    """Draw 3D axes on each detected marker to show orientation."""
     # Project the 3D points to 2D for cube visualization
     object_points = np.array([
         [-0.02, -0.02, 0],  # 0
@@ -162,7 +150,7 @@ def main():
             print("Failed to grab frame")
             break
 
-        # Undistort frame to remove lens distortion
+        # Undistorted frame to remove lens distortion
         frame_undistorted = cv2.undistort(frame, cameraMatrix, distCoeffs)
 
         # Detect ArUco markers in the frame
