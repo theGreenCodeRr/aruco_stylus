@@ -1,19 +1,16 @@
-import sys
-import numpy as np
 import cv2
 from cv2 import aruco
-import pyqtgraph as pg
-from PyQt5 import QtCore, QtWidgets  # Correct import for QtWidgets
+import numpy as np
 import math
 
-# Camera setup function
+
 def camera_setup():
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FPS, 30)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # Camera matrix and distortion coefficients (calibrated values)
+    # Camera calibration parameters
     cameraMatrix = np.array(
         [[505.1150576, 0, 359.14439401],
          [0, 510.33530166, 230.33963591],
@@ -23,7 +20,7 @@ def camera_setup():
 
     return cap, cameraMatrix, distCoeffs
 
-# ArUco setup function
+
 def aruco_setup():
     dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters()
@@ -32,7 +29,7 @@ def aruco_setup():
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
     return detector, marker_size
 
-# Pose estimation for the marker (computing rotation and translation vectors)
+
 def pose_estimation(corner, marker_size, cameraMatrix, distCoeffs):
     marker_points = np.array([
         [-marker_size / 2, marker_size / 2, 0],
@@ -41,72 +38,122 @@ def pose_estimation(corner, marker_size, cameraMatrix, distCoeffs):
         [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
 
     success, rvecs, tvecs = cv2.solvePnP(marker_points, corner, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_ITERATIVE)
+
     if success:
-        rvecs = rvecs.reshape((3, 1)) if rvecs.shape != (3, 1) else rvecs
-        tvecs = tvecs.reshape((3, 1)) if tvecs.shape != (3, 1) else tvecs
+        if rvecs is not None and rvecs.shape != (3, 1):
+            rvecs = rvecs.reshape((3, 1))
+        if tvecs is not None and tvecs.shape != (3, 1):
+            tvecs = tvecs.reshape((3, 1))
+    else:
+        return None, None
+
     return rvecs, tvecs
 
-# PyQt window and 3D plot setup
-class Window(QtWidgets.QWidget):  # Correctly inherit from QWidget
-    def __init__(self):
-        super().__init__()
 
-        self.setWindowTitle("Real-Time 3D Visualization")
-        self.setGeometry(100, 100, 800, 600)
-        self.layout = QtWidgets.QVBoxLayout(self)
+def calculate_tip_position(rvec, tvec, offset):
+    """Calculate the position of the stylus tip."""
+    R, _ = cv2.Rodrigues(rvec)
+    tip_position = tvec.reshape(-1) + R @ offset
+    return tip_position
 
-        # Create a 3D plot using PyQtGraph
-        self.plotWidget = pg.PlotWidget()
-        self.layout.addWidget(self.plotWidget)
+def calculate_euler_angles(rvec):
+    R, _ = cv2.Rodrigues(rvec)
+    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+    singular = sy < 1e-6
 
-        # Create a 3D scatter plot
-        self.scatter = pg.ScatterPlotItem(size=10, symbol='o', brush=(255, 0, 0))  # Red pen tip
-        self.plotWidget.addItem(self.scatter)
+    if not singular:
+        x = math.atan2(R[2, 1], R[2, 2])
+        y = math.atan2(-R[2, 0], sy)
+        z = math.atan2(R[1, 0], R[0, 0])
+    else:
+        x = math.atan2(-R[1, 2], R[1, 1])
+        y = math.atan2(-R[2, 0], sy)
+        z = 0
 
-        # Set up the camera and ArUco detection
-        self.cap, self.cameraMatrix, self.distCoeffs = camera_setup()
-        self.detector, self.marker_size = aruco_setup()
+    return np.degrees([x, y, z])
 
-        # Start a timer to update the plot
-        self.timer = QtCore.QTimer(self)
-        self.timer.timeout.connect(self.update_plot)
-        self.timer.start(50)  # Update every 50ms
 
-    def update_plot(self):
-        ret, img = self.cap.read()
+def draw_tip_as_dot(frame, rvec, tvec, cameraMatrix, distCoeffs, offset):
+    """Project the 3D tip position onto the image as a red dot."""
+    # Compute the 3D position of the tip
+    R, _ = cv2.Rodrigues(rvec)
+    tip_position = tvec.reshape(-1) + R @ offset  # Compute the tip position in the marker's coordinate frame
+    tip_position = tip_position.reshape(1, 1, 3)  # Reshape for `projectPoints`
+
+    # Project the 3D position of the tip onto the 2D image plane
+    image_points, _ = cv2.projectPoints(tip_position, rvec, tvec, cameraMatrix, distCoeffs)
+
+    # Extract the first 2D point
+    tip_2d = image_points[0][0]  # Extract the point from the nested array
+    # print("Extracted Tip (float):", tip_2d)  # Debugging step
+
+    # Ensure tip_2d is converted to integer
+    tip_2d = tuple(map(int, tip_2d))  # Convert to integer tuple
+    # print("Converted Tip (int):", tip_2d)  # Debugging step
+
+    # Draw the red dot on the frame
+    cv2.circle(frame, tip_2d, 5, (0, 0, 255), -1)
+    cv2.rectangle(frame, (tip_2d[0] - 5, tip_2d[1] - 5), (tip_2d[0] + 5, tip_2d[1] + 5), (0, 0, 255), -1)
+
+
+def display_marker_info(frame, rvec, tvec, font):
+    # Calculate Euler angles (yaw, pitch, roll)
+    angles = calculate_euler_angles(rvec)
+
+    # Convert from meters to millimeters and extract x, y, z components
+    x, y, z = tvec[0][0] * 1000, tvec[1][0] * 1000, tvec[2][0] * 1000  # Marker center in mm
+
+    # # Display the information on the frame
+    # cv2.putText(frame, f'Marker X: {round(x, 2)} mm', (10, 80), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    # cv2.putText(frame, f'Marker Y: {round(y, 2)} mm', (10, 110), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    # cv2.putText(frame, f'Marker Z: {round(z, 2)} mm', (10, 140), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    # cv2.putText(frame, f'Yaw: {round(angles[2], 2)} deg', (10, 170), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    # cv2.putText(frame, f'Pitch: {round(angles[0], 2)} deg', (10, 200), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    # cv2.putText(frame, f'Roll: {round(angles[1], 2)} deg', (10, 230), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+
+def main():
+    # Setup camera and marker detection parameters
+    cap, cameraMatrix, distCoeffs = camera_setup()
+    detector, marker_size = aruco_setup()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+
+    # Offset for the stylus tip (100mm deep, perpendicular to marker)
+    offset = np.array([0.0, 0.0, -0.1])  # In meters
+
+    while True:
+        ret, frame = cap.read()
         if not ret:
             print("Failed to grab frame")
-            return
+            break
 
-        img_undistorted = cv2.undistort(img, self.cameraMatrix, self.distCoeffs)
-        corners, ids, _ = self.detector.detectMarkers(img_undistorted)
+        # Undistorted frame to remove lens distortion
+        frame_undistorted = cv2.undistort(frame, cameraMatrix, distCoeffs)
+
+        # Detect ArUco markers in the frame
+        corners, ids, _ = detector.detectMarkers(frame_undistorted)
 
         if len(corners) > 0:
-            for corner in corners:
-                rvecs, tvecs = pose_estimation(corner, self.marker_size, self.cameraMatrix, self.distCoeffs)
+            for i, corner in enumerate(corners):
+                rvecs, tvecs = pose_estimation(corner, marker_size, cameraMatrix, distCoeffs)
 
                 if rvecs is not None and tvecs is not None:
-                    # Calculate the position of the pen tip and marker axes
-                    rotation_matrix, _ = cv2.Rodrigues(rvecs)
-                    origin = tvecs.flatten() * 1000  # Convert to mm
-                    pen_tip_local = np.array([[-0.01], [-0.05], [0.1]])  # Offset in meters (pen tip location)
-                    pen_tip_world = rotation_matrix @ pen_tip_local + tvecs
-                    pen_tip_mm = pen_tip_world.flatten() * 1000  # Convert to mm
+                    # Draw the stylus tip as a red dot
+                    draw_tip_as_dot(frame, rvecs, tvecs, cameraMatrix, distCoeffs, offset)
 
-                    # Update the scatter plot with the new pen tip position
-                    x, y, z = pen_tip_mm
-                    self.scatter.setData([x], [y], [z])  # Correct call to setData with separate lists for x, y, z
+                    # Display marker information
+                    display_marker_info(frame, rvecs, tvecs, font)
 
-    def closeEvent(self, event):
-        self.cap.release()
-        event.accept()
+        # Display the processed frame
+        cv2.imshow("Frame", frame)
 
-# Main function to start the PyQt application
-def main():
-    app = QtWidgets.QApplication(sys.argv)  # Use QtWidgets for PyQt5
-    window = Window()
-    window.show()
-    sys.exit(app.exec_())
+        # Break loop on 'Esc' key press
+        if cv2.waitKey(1) & 0xFF == 27:
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     main()
