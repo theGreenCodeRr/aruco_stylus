@@ -129,3 +129,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# The code above is a simplified version of the original code. The original code is more complex and has more features.
