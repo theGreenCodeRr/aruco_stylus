@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # Chessboard size
-square_size = 19      # Mesh size (in mm)
+square_size = 21.5      # Mesh size (in mm)
 pattern_size = (7, 7)  # Number of interception points
 reference_img = 40     # Number of images to be captured
 

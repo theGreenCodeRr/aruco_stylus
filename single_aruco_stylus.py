@@ -10,12 +10,13 @@ def camera_setup():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
+    # cameraMatrix & distCoeffs: global shutter camera
     cameraMatrix = np.array(
-        [[505.1150576, 0, 359.14439401],
-         [0, 510.33530166, 230.33963591],
+        [[445.84746516, 0, 327.63842281],
+         [0, 444.89612099, 228.90077799],
          [0, 0, 1]],
         dtype='double')
-    distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062]], dtype='double')
+    distCoeffs = np.array([[0.07796057], [-0.00382705], [-0.00083461], [0.00072895], [-0.18872772], ], dtype='double')
 
     return cap, cameraMatrix, distCoeffs
 
@@ -83,11 +84,12 @@ def display_marker_info(frame, rvec, tvec, font, tip_point=None):
     cv2.putText(frame, f'Pitch: {round(marker_angles[0], 2)} deg', (10, 200), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
     cv2.putText(frame, f'Roll: {round(marker_angles[1], 2)} deg', (10, 230), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
+
     # Tip Data
     if tip_point is not None:
         tip_x, tip_y, tip_z = tip_point * 1000  # Convert to mm
         tip_angles = marker_angles  # Tip shares the same orientation as the marker
-        cv2.putText(frame, f"Tip [150mm(-z) ]:", (10, 270), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(frame, f"Tip [150mm(-z) ]", (10, 270), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
         cv2.putText(frame, f'X: {round(tip_x, 2)} mm', (10, 310), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
         cv2.putText(frame, f'Y: {round(tip_y, 2)} mm', (10, 340), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
         cv2.putText(frame, f'Z: {round(tip_z, 2)} mm', (10, 370), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
@@ -129,5 +131,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# The code above is a simplified version of the original code. The original code is more complex and has more features.
