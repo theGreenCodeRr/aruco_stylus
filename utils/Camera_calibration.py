@@ -2,9 +2,9 @@ import cv2
 import numpy as np
 
 # Chessboard size
-square_size = 21.5      # Mesh size (in mm)
-pattern_size = (7, 7)  # Number of interception points
-reference_img = 40     # Number of images to be captured
+square_size = 20      # Mesh size (in mm)
+pattern_size = (7, 10)  # Number of interception points
+reference_img = 100     # Number of images to be captured
 
 pattern_points = np.zeros((np.prod(pattern_size), 3), np.float32)  # Chessboard coordinate (X,Y,Z) with (Z=0)
 pattern_points[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)

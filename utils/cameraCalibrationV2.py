@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 
 # Chessboard size
-square_size = 21.5  # Mesh size (in mm)
-pattern_size = (7, 7)  # Number of interception points
+square_size = 20  # Mesh size (in mm)
+pattern_size = (7, 10)  # Number of interception points
 reference_img = 40  # Number of images to be captured
 
 # Chessboard coordinates (X, Y, Z) with Z=0
@@ -66,6 +66,7 @@ else:
 
     distCoeffs = np.array([dist[0, 0], dist[0, 1], dist[0, 2], dist[0, 3], dist[0, 4]], dtype='double').reshape(-1, 1)
 
+    print("RMS = ", ret)
     print("cameraMatrix = np.array(")
     print("    [")
     for row in cameraMatrix:
@@ -81,22 +82,3 @@ else:
     print("    ],")
     print("    dtype='double'")
     print(")")
-
-# globalShutterCam
-
-
-#  # mac webcam
-# cameraMatrix = np.array(
-#     [
-#         [581.2490064821088, 0.0, 305.2885321972521],
-#         [0.0, 587.6316817762934, 288.9932758741485],
-#         [0.0, 0.0, 1.0],],
-#     dtype='double')
-# distCoeffs = np.array(
-#     [
-#         [-0.31329614267146066],
-#         [0.8386295742029726],
-#         [-0.0024210244191179104],
-#         [0.016349338905846198],
-#         [-1.133637004544031],],
-#     dtype='double')
