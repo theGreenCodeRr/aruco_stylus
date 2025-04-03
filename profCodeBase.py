@@ -12,29 +12,30 @@ def setup_web_camera():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # cameraMatrix & distCoeffs: global shutter camera
-    cameraMatrix = np.array(
-        [[505.1150576, 0, 359.14439401],
-         [0, 510.33530166, 230.33963591],
-         [0, 0, 1]],
-        dtype='double')
-    distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062],], dtype='double')
-
-    # # mac webcam
+    # # cameraMatrix & distCoeffs: global shutter camera
     # cameraMatrix = np.array(
-    #     [
-    #         [581.2490064821088, 0.0, 305.2885321972521],
-    #         [0.0, 587.6316817762934, 288.9932758741485],
-    #         [0.0, 0.0, 1.0], ],
+    #     [[505.1150576, 0, 359.14439401],
+    #      [0, 510.33530166, 230.33963591],
+    #      [0, 0, 1]],
     #     dtype='double')
-    # distCoeffs = np.array(
-    #     [
-    #         [-0.31329614267146066],
-    #         [0.8386295742029726],
-    #         [-0.0024210244191179104],
-    #         [0.016349338905846198],
-    #         [-1.133637004544031], ],
-    #     dtype='double')
+    # distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062],], dtype='double')
+
+    # cameraMatrix & distCoeffs: logitech camera
+    cameraMatrix = np.array(
+        [
+            [1075.3188717662906, 0.0, 315.01708041919454],
+            [0.0, 1072.0190163009527, 248.65205121389417],
+            [0.0, 0.0, 1.0],
+        ], dtype='double')
+
+    distCoeffs = np.array(
+        [
+            [2.0385351431950802],
+            [-48.15234700186453],
+            [-0.0028814706039823586],
+            [-0.002306682662702244],
+            [449.20242120647697],
+        ], dtype='double')
     return cap, cameraMatrix, distCoeffs
 
 

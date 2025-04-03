@@ -17,12 +17,21 @@ parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
 detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 
 # cameraMatrix & dist for my lab camera
-cameraMatrix = np.array([
-    [763.43512892, 0, 321.85994173],
-    [0, 764.52495998, 187.09227291],
-    [0, 0, 1]],
-    dtype='double', )
-distCoeffs = np.array([[0.13158662], [0.26274676], [-0.00894502], [-0.0041256], [-0.12036324]])
+cameraMatrix = np.array(
+    [
+        [1075.3188717662906, 0.0, 315.01708041919454],
+        [0.0, 1072.0190163009527, 248.65205121389417],
+        [0.0, 0.0, 1.0],
+    ], dtype='double')
+
+distCoeffs = np.array(
+    [
+        [2.0385351431950802],
+        [-48.15234700186453],
+        [-0.0028814706039823586],
+        [-0.002306682662702244],
+        [449.20242120647697],
+    ], dtype='double')
 
 cap.set(cv2.CAP_PROP_FPS, 30)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
