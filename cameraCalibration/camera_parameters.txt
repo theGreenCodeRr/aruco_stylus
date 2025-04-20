@@ -2,8 +2,8 @@
 
 
 
-Logitech Pro:
-RMS error = 0.1198
+#Logitech Pro:
+#RMS error = 0.1198 Mean reprojection error: 0.0143
 
 cameraMatrix = np.array(
     [
@@ -21,4 +21,3 @@ distCoeffs = np.array(
         [449.20242120647697],
     ], dtype='double')
 
-[INFO] Mean reprojection error: 0.0143

@@ -16,7 +16,8 @@ marker_size = 0.05  # in meter
 parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
 detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 
-# cameraMatrix & dist for my lab camera
+#Logitech Pro:
+#RMS error = 0.1198 Mean reprojection error: 0.0143
 cameraMatrix = np.array(
     [
         [1075.3188717662906, 0.0, 315.01708041919454],
