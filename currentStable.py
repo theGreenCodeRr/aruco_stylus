@@ -1,180 +1,132 @@
 import cv2
 from cv2 import aruco
 import numpy as np
-import math
+import pandas as pd
+from collections import deque
+from utils import util_draw_custom  # Draw using PyQtGraph
+
+def load_camera_calibration():
+    # Camera intrinsic parameters and distortion coefficients
+    cameraMatrix = np.array([
+        [544.191261501094, 0.0, 938.375784412138],
+        [0.0, 539.5886057166153, 490.75243759671406],
+        [0.0, 0.0, 1.0],
+    ], dtype='double')
+    distCoeffs = np.array([
+        [0.0929139556606537],
+        [-0.09051659316149255],
+        [-0.0026022568575366028],
+        [-0.00010257374456200485],
+        [0.043047517532135635],
+    ], dtype='double')
+    return cameraMatrix, distCoeffs
 
 
-def camera_setup():
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FPS, 30)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-    # cameraMatrix & distCoeffs: global shutter camera
-    cameraMatrix = np.array(
-        [[505.1150576, 0, 359.14439401],
-         [0, 510.33530166, 230.33963591],
-         [0, 0, 1]],
-        dtype='double')
-    distCoeffs = np.array([[0.07632527], [0.15558049], [0.00234922], [0.00500232], [-0.46829062],], dtype='double')
-
-    return cap, cameraMatrix, distCoeffs
+def setup_video_file(path):
+    cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        raise IOError(f"Cannot open video file: {path}")
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    print(f"Video opened: {width:.0f}x{height:.0f} @ {fps:.2f} FPS")
+    return cap
 
 
-def aruco_setup():
+def setup_aruco():
     dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters()
-    marker_size = 0.059  # Marker size in meters
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+    marker_size = 0.016  # meters
     return detector, marker_size
 
 
-def pose_estimation(corner, marker_size, cameraMatrix, distCoeffs):
+def estimatePoseLocal(corner, marker_size, cameraMatrix, distCoeffs):
     marker_points = np.array([
-        [-marker_size / 2, marker_size / 2, 0],
-        [marker_size / 2, marker_size / 2, 0],
-        [marker_size / 2, -marker_size / 2, 0],
-        [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
-
-    success, rvecs, tvecs = cv2.solvePnP(marker_points, corner, cameraMatrix, distCoeffs, False, cv2.SOLVEPNP_ITERATIVE)
-
-    if success:
-        if rvecs is not None and rvecs.shape != (3, 1):
-            rvecs = rvecs.reshape((3, 1))
-        if tvecs is not None and tvecs.shape != (3, 1):
-            tvecs = tvecs.reshape((3, 1))
-    else:
-        return None, None
-
+        [-marker_size/2,  marker_size/2, 0],
+        [ marker_size/2,  marker_size/2, 0],
+        [ marker_size/2, -marker_size/2, 0],
+        [-marker_size/2, -marker_size/2, 0],
+    ], dtype=np.float32)
+    _, rvecs, tvecs = cv2.solvePnP(
+        marker_points, corner, cameraMatrix, distCoeffs,
+        False, cv2.SOLVEPNP_ITERATIVE
+    )
     return rvecs, tvecs
 
 
-def calculate_euler_angles(rvec):
-    R, _ = cv2.Rodrigues(rvec)
-    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
-    singular = sy < 1e-6
-
-    if not singular:
-        x = math.atan2(R[2, 1], R[2, 2])
-        y = math.atan2(-R[2, 0], sy)
-        z = math.atan2(R[1, 0], R[0, 0])
-    else:
-        x = math.atan2(-R[1, 2], R[1, 1])
-        y = math.atan2(-R[2, 0], sy)
-        z = 0
-
-    return np.degrees([x, y, z])
-
-
-def display_marker_info(frame, rvec, tvec, font):
-    # Calculate Euler angles (yaw, pitch, roll)
-    angles = calculate_euler_angles(rvec)
-
-    # Convert from meters to millimeters and extract x, y, z components
-    x, y, z = tvec[0][0] * 1000, tvec[1][0] * 1000, tvec[2][0] * 1000  # Convert to mm
-    distance_rounded = round(z, 4)  # Z-axis is often used as distance
-
-    # Display the information on the frame
-    cv2.putText(frame, f'X: {round(x, 2)} mm', (10, 80), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.putText(frame, f'Y: {round(y, 2)} mm', (10, 110), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.putText(frame, f'Z (Distance): {distance_rounded} mm', (10, 140), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.putText(frame, f'Yaw: {round(angles[2], 2)} deg', (10, 170), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.putText(frame, f'Pitch: {round(angles[0], 2)} deg', (10, 200), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.putText(frame, f'Roll: {round(angles[1], 2)} deg', (10, 230), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-
-
-def draw_detected_markers(frame, corners, ids):
-    aruco.drawDetectedMarkers(frame, corners, ids, (0, 255, 0))
-    for i, corner in enumerate(corners):
-        points = corner[0].astype(np.int32)
-        cv2.polylines(frame, [points], True, (0, 255, 255))
-        cv2.putText(frame, str(ids[i][0]), tuple(points[0]), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 1)
-
-
-def draw_marker_axes(frame, cameraMatrix, distCoeffs, rvec, tvec):
-    # Project the 3D points to 2D for cube visualization
-    object_points = np.array([
-        [-0.02, -0.02, 0],  # 0
-        [0.02, -0.02, 0],  # 1
-        [0.02, 0.02, 0],  # 2
-        [-0.02, 0.02, 0],  # 3
-        [-0.02, -0.02, 0.02],  # 4
-        [0.02, -0.02, 0.02],  # 5
-        [0.02, 0.02, 0.02],  # 6
-        [-0.02, 0.02, 0.02]  # 7
-    ], dtype=np.float32)
-
-    image_points, _ = cv2.projectPoints(object_points, rvec, tvec, cameraMatrix, distCoeffs)
-    image_points = image_points.reshape(-1, 2)  # Reshape the output for easier indexing
-
-    # Draw the projected 2D points on the frame
-    for point in image_points:
-        point = tuple(map(int, point))  # Convert the point to a tuple of integers
-        cv2.circle(frame, point, 5, (0, 0, 255), -1)  # Draw points (red)
-
-    # Draw lines to form a cube
-    for i in range(4):  # Bottom square
-        start_point = tuple(map(int, image_points[i]))
-        end_point = tuple(map(int, image_points[(i + 1) % 4]))
-        cv2.line(frame, start_point, end_point, (0, 255, 0), 2)  # Line 1-2, 2-3, 3-4, 4-1
-
-    # Top square
-    for i in range(4, 8):  # Top square
-        start_point = tuple(map(int, image_points[i]))
-        end_point = tuple(map(int, image_points[(i + 1) % 4 + 4]))  # Connecting the top points (5-6, 6-7, 7-8, 8-5)
-        cv2.line(frame, start_point, end_point, (0, 255, 0), 2)
-
-    # Connect top and bottom
-    for i in range(4):  # Connecting top and bottom (vertical lines)
-        start_point = tuple(map(int, image_points[i]))
-        end_point = tuple(map(int, image_points[i + 4]))  # Connecting bottom to top (1-5, 2-6, 3-7, 4-8)
-        cv2.line(frame, start_point, end_point, (0, 255, 0), 2)
-
-    # Draw x, y, z axes on each detected marker to show orientation
-    axis_length = 0.03  # Length of the axes in meters (e.g., 30 mm)
-
-    # Draw the x (red), y (green), and z (blue) axes on the frame
-    cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, rvec, tvec, axis_length)
+def estimatePoseGlobal(model_points, image_points, cameraMatrix, distCoeffs):
+    obj_pts = model_points.reshape(-1, 1, 3).astype(np.float32)
+    img_pts = image_points.reshape(-1, 1, 2).astype(np.float32)
+    _, rvecs, tvecs = cv2.solvePnP(
+        obj_pts, img_pts, cameraMatrix, distCoeffs,
+        False, cv2.SOLVEPNP_ITERATIVE
+    )
+    return rvecs, tvecs
 
 
 def main():
-    # Setup camera and marker detection parameters
-    cap, cameraMatrix, distCoeffs = camera_setup()
-    detector, marker_size = aruco_setup()
-    font = cv2.FONT_HERSHEY_SIMPLEX
+    video_path = 'video/cam0_1080p30.mkv'
+    cap = setup_video_file(video_path)
+    cameraMatrix, distCoeffs = load_camera_calibration()
+    detector, marker_size = setup_aruco()
+
+    # Load model points for global pose
+    data = pd.read_csv('markers/model_points_4x4.csv')
+    points = data[['x', 'y', 'z']].values.tolist()
+    model_points_3d_list = [points[i:i+4] for i in range(0, len(points), 4)]
+
+    global_pose = True
+    origin_pts = deque()
 
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Failed to grab frame")
+            print("End of video stream")
             break
 
-        # Undistorted frame to remove lens distortion
-        frame_undistorted = cv2.undistort(frame, cameraMatrix, distCoeffs)
+        corners, ids, _ = detector.detectMarkers(frame)
+        aruco.drawDetectedMarkers(frame, corners, ids, borderColor=(0,255,0))
 
-        # Detect ArUco markers in the frame
-        corners, ids, _ = detector.detectMarkers(frame_undistorted)
+        img_pts = []
+        obj_pts = []
 
-        if len(corners) > 0:
-            for i, corner in enumerate(corners):
-                rvecs, tvecs = pose_estimation(corner, marker_size, cameraMatrix, distCoeffs)
+        if ids is not None:
+            for idx, corner in zip(ids.flatten(), corners):
+                if idx < len(model_points_3d_list):
+                    rvec, tvec = estimatePoseLocal(corner[0], marker_size, cameraMatrix, distCoeffs)
+                    if not global_pose:
+                        cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, rvec, tvec, 0.01)
 
-                if rvecs is not None and tvecs is not None:
-                    display_marker_info(frame, rvecs, tvecs, font)
-                    draw_detected_markers(frame, corners, ids)
-                    draw_marker_axes(frame, cameraMatrix, distCoeffs, rvecs, tvecs)  # Draw XYZ axes
+                    for pt2d, pt3d in zip(corner[0], model_points_3d_list[idx]):
+                        img_pts.append(pt2d)
+                        obj_pts.append(pt3d)
 
-        # Display the processed frame
-        cv2.imshow("Frame", frame)
+            if len(obj_pts) >= 4:
+                img_np = np.array(img_pts, dtype=np.float32)
+                obj_np = np.array(obj_pts, dtype=np.float32)
+                rvec_g, tvec_g = estimatePoseGlobal(obj_np, img_np, cameraMatrix, distCoeffs)
 
-        # Break loop on 'Esc' key press
-        if cv2.waitKey(1) & 0xFF == 27:
-            break
+                # Project the world origin to image
+                origin_3d = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
+                proj, _ = cv2.projectPoints(origin_3d, rvec_g, tvec_g, cameraMatrix, distCoeffs)
+                x, y = proj[0][0].astype(int)
+
+                origin_pts.append((x, y))
+                # Draw trajectory on video frame
+                for i in range(1, len(origin_pts)):
+                    p0, p1 = origin_pts[i-1], origin_pts[i]
+                    cv2.line(frame, p0, p1, (0, 255, 0), 2)
+                # Draw current origin marker
+                cv2.circle(frame, (x, y), 6, (0, 0, 255), -1)
+                cv2.putText(frame, 'Origin', (x + 10, y + 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+
+        # Display frame and handle GUI toggles
+        global_pose, _ = util_draw_custom.draw_image(frame)
 
     cap.release()
-    cv2.destroyAllWindows()
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
