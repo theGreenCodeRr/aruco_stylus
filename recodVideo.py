@@ -99,7 +99,7 @@ def main(cam_configs):
 
 if __name__ == '__main__':
     configs = [
-        {'idx': 0, 'width': 1920, 'height': 1080, 'fps': 60, 'output': 'videos/cam0_1080p60.mkv'},
+        {'idx': 0, 'width': 1920, 'height': 1080, 'fps': 30, 'output': 'videos/cam0_1080p60.mkv'},
         {'idx': 1, 'width': 1280, 'height': 720,  'fps': 30, 'output': 'videos/cam1_720p30.mkv'},
         {'idx': 2, 'width': 1280, 'height': 720,  'fps': 30, 'output': 'videos/cam2_720p30.mkv'},
     ]
