@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 def camera_calibration():
+    # Hard-coded camera intrinsics and distortion coefficients
     cameraMatrix = np.array([
         [544.191261501094, 0.0, 938.375784412138],
         [0.0, 539.5886057166153, 490.75243759671406],
@@ -18,131 +19,148 @@ def camera_calibration():
     ], dtype='double')
     return cameraMatrix, distCoeffs
 
+
 def setup_aruco():
+    # Prepare ArUco detector
     dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     params = aruco.DetectorParameters()
     params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
     detector = aruco.ArucoDetector(dictionary, params)
-    marker_size = 0.016  # meters
+    marker_size = 0.016  # Marker side length in meters
     return detector, marker_size
 
-def estimatePoseLocal(corner, marker_size, cameraMatrix, distCoeffs):
+
+def estimatePoseLocal(corners, marker_size, cameraMatrix, distCoeffs):
+    # 3D coordinates of the marker's corners in its local frame
     obj_pts = np.array([
         [-marker_size/2,  marker_size/2, 0],
         [ marker_size/2,  marker_size/2, 0],
         [ marker_size/2, -marker_size/2, 0],
         [-marker_size/2, -marker_size/2, 0],
     ], dtype=np.float32)
+    # Solve PnP for local pose
     _, rvec, tvec = cv2.solvePnP(
-        obj_pts, corner, cameraMatrix, distCoeffs,
-        False, cv2.SOLVEPNP_ITERATIVE
+        obj_pts, corners, cameraMatrix, distCoeffs,
+        useExtrinsicGuess=False, flags=cv2.SOLVEPNP_ITERATIVE
     )
     return rvec.flatten(), tvec.flatten()
+
 
 def estimatePoseGlobal(model_pts, img_pts, cameraMatrix, distCoeffs):
-    obj = model_pts.reshape(-1,1,3).astype(np.float32)
-    img = img_pts.reshape(-1,1,2).astype(np.float32)
+    # Flatten and reshape for solvePnP
+    obj = model_pts.reshape(-1, 1, 3).astype(np.float32)
+    img = img_pts.reshape(-1, 1, 2).astype(np.float32)
     _, rvec, tvec = cv2.solvePnP(
         obj, img, cameraMatrix, distCoeffs,
-        False, cv2.SOLVEPNP_ITERATIVE
+        useExtrinsicGuess=False, flags=cv2.SOLVEPNP_ITERATIVE
     )
     return rvec.flatten(), tvec.flatten()
 
+
 def main():
-    # Paths to videos
+    # Video file paths per camera
     paths = {
         'cam0': 'video/cam0_1080p30.mkv',
         'cam1': 'video/cam1_720p30.mkv',
         'cam2': 'video/cam2_720p30.mkv',
     }
-    # Open captures
-    caps = {name: cv2.VideoCapture(p) for name,p in paths.items()}
+    # Open VideoCaptures
+    caps = {name: cv2.VideoCapture(p) for name, p in paths.items()}
     for name, cap in caps.items():
         if not cap.isOpened():
             raise IOError(f"Cannot open {name} at {paths[name]}")
 
-    # Get cam0 resolution & frame count
+    # Reference resolution and frame count from cam0
     w0 = int(caps['cam0'].get(cv2.CAP_PROP_FRAME_WIDTH))
     h0 = int(caps['cam0'].get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(caps['cam0'].get(cv2.CAP_PROP_FRAME_COUNT))
 
-    # Calibration & ArUco
+    # Camera calibration and ArUco setup
     cameraMatrix, distCoeffs = camera_calibration()
     detector, marker_size = setup_aruco()
 
-    # Load 3D model points
+    # Load 3D model points for each marker ID
     data = pd.read_csv('markers/model_points_4x4.csv')
-    pts = data[['x','y','z']].values.tolist()
+    pts = data[['x', 'y', 'z']].values.tolist()
     model_pts_list = [np.array(pts[i:i+4], dtype=np.float32)
                       for i in range(0, len(pts), 4)]
 
-    # Select 50 frames at even intervals
-    frame_indices = np.linspace(0, total_frames - 1, num=50, dtype=int)
+    #frame_indices = np.linspace(0, total_frames - 1, num=50, dtype=int) # Sample 50 frames at even intervals
+
+    frame_indices = range(total_frames) #all frames
 
     rows = []
     for idx in frame_indices:
-        # grab each camera frame at idx
+        # Grab and resize frames from each camera
         frames = {}
         for name, cap in caps.items():
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, frm = cap.read()
             if not ret:
+                # fallback blank frame if read fails
                 frm = np.zeros((h0, w0, 3), np.uint8)
             elif name != 'cam0':
                 frm = cv2.resize(frm, (w0, h0))
             frames[name] = frm
 
-        # display windows
+        # Show all camera windows until manual input
         for name, frm in frames.items():
             cv2.imshow(name, frm)
-        cv2.waitKey(100)
+        cv2.waitKey(1)  # render windows
 
-        # manual angle
+        # Get manual angle input
         angle = float(input(f"Frame {idx}: Enter protractor angle (deg): "))
+        for name in frames.keys():
+            cv2.destroyWindow(name)
 
-        # detect on cam0
+        # Detect markers in cam0 image
         cam0 = frames['cam0']
         corners, ids, _ = detector.detectMarkers(cam0)
-        img_pts, obj_pts = [], []
 
+        img_pts, obj_pts = [], []
         if ids is not None:
             for mid, corner in zip(ids.flatten(), corners):
+                # Estimate local pose
                 r_loc, t_loc = estimatePoseLocal(
                     corner[0], marker_size, cameraMatrix, distCoeffs)
+                # Record row: frame, angle, global placeholders, marker_id, local pose
                 rows.append([
                     idx, angle,
-                    np.nan, np.nan, np.nan,  # placeholders for global
-                    np.nan, np.nan, np.nan,
-                    mid, *t_loc
+                    np.nan, np.nan, np.nan,   # rglob_x, rglob_y, rglob_z
+                    np.nan, np.nan, np.nan,   # tglob_x, tglob_y, tglob_z
+                    mid,                       # marker_id
+                    r_loc[0], r_loc[1], r_loc[2],  # rloc_x, rloc_y, rloc_z
+                    t_loc[0], t_loc[1], t_loc[2]   # tx_local, ty_local, tz_local
                 ])
+                # Accumulate for global pose if model data exists
                 if mid < len(model_pts_list):
                     for p2d, p3d in zip(corner[0], model_pts_list[mid]):
                         img_pts.append(p2d)
                         obj_pts.append(p3d)
 
-        # fused global
+        # Fuse global pose when enough correspondences
         if len(obj_pts) >= 4:
             r_glob, t_glob = estimatePoseGlobal(
                 np.array(obj_pts), np.array(img_pts),
                 cameraMatrix, distCoeffs)
             n = len(ids.flatten()) if ids is not None else 0
+            # Backfill global pose for last n rows
             for i in range(1, n+1):
                 rows[-i][2:8] = [*r_glob, *t_glob]
 
-        # close windows
-        for name in frames:
-            cv2.destroyWindow(name)
-
-    # save CSV
+    # Save all annotations to CSV
     df = pd.DataFrame(rows, columns=[
-        'frame','input_angle',
-        'rglob_x','rglob_y','rglob_z','tglob_x','tglob_y','tglob_z',
-        'marker_id','tx_local','ty_local','tz_local'
+        'frame', 'input_angle',
+        'rglob_x', 'rglob_y', 'rglob_z',
+        'tglob_x', 'tglob_y', 'tglob_z',
+        'marker_id',
+        'rloc_x', 'rloc_y', 'rloc_z',
+        'tx_local', 'ty_local', 'tz_local'
     ])
-    df.to_csv('annotated_poses.csv', index=False)
-    print("Saved annotated_poses.csv")
+    df.to_csv('6DoF_annotated_poses.csv', index=False)
+    print("Saved >> 6DoF_annotated_poses.csv")
 
-    # cleanup
+    # Clean up
     for cap in caps.values():
         cap.release()
     cv2.destroyAllWindows()
