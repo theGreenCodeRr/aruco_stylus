@@ -242,12 +242,12 @@ def main():
     # Save logs to CSV
     if len(local_records) > 0:
         df_local = pd.DataFrame(local_records)
-        df_local.to_csv('plain_aruco_local.csv', index=False)
+        df_local.to_csv('cam0_aruco_local.csv', index=False)
         print(f"Saved {len(df_local)} local‐pose rows → plain_aruco_local.csv")
 
     if len(global_records) > 0:
         df_global = pd.DataFrame(global_records)
-        df_global.to_csv('plain_aruco_global.csv', index=False)
+        df_global.to_csv('cam0_aruco_global.csv', index=False)
         print(f"Saved {len(df_global)} global‐pose rows → plain_aruco_global.csv")
 
 if __name__ == '__main__':
