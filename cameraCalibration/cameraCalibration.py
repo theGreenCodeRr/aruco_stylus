@@ -4,7 +4,7 @@ import numpy as np
 # Chessboard size
 square_size = 20  # Mesh size (in mm)
 pattern_size = (7, 10)  # Number of interception points
-reference_img = 40  # Number of images to be captured
+reference_img = 100  # Number of images to be captured
 
 # Chessboard coordinates (X, Y, Z) with Z=0
 pattern_points = np.zeros((np.prod(pattern_size), 3), np.float32)
@@ -15,8 +15,8 @@ objpoints = []  # 3D points in real world space
 imgpoints = []  # 2D points in image plane
 
 # Set camera resolution
-width = 640
-height = 480
+width = 1920
+height = 1080
 capture = cv2.VideoCapture(0)
 capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
 capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)

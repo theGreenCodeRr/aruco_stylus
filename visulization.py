@@ -123,7 +123,7 @@ def analyze_and_plot(df: pd.DataFrame, show_plots: bool = True) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description='Pose Prediction Analysis')
-    parser.add_argument('-c', '--csv', default='6DoF_annotated_poses.csv', help='CSV path')
+    parser.add_argument('-c', '--csv', default='CSVs/6DoF_annotated_poses.csv', help='CSVs/6DoF_annotated_poses.csv')
     parser.add_argument('--no-plots', action='store_true', help='Disable plotting')
     args = parser.parse_args()
     if not os.path.isfile(args.csv):

@@ -99,7 +99,7 @@ def rvec_to_euler(rvec):
 
 
 def main():
-    video_path = 'video/cam0_1080p30.mkv'
+    video_path = '../video/cam0_1080p30.mkv'
     local_thickness = 3
     global_thickness = 7
     start_frame = 1
@@ -109,7 +109,7 @@ def main():
     cameraMatrix, distCoeffs = load_camera_calibration()
     detector, marker_size = setup_aruco()
 
-    data = pd.read_csv('markers/model_points_4x4.csv')
+    data = pd.read_csv('../markers/model_points_4x4.csv')
     pts = data[['x','y','z']].values
     model_pts_list = np.split(pts, len(pts)//4)
 
@@ -272,12 +272,12 @@ def main():
 
     if len(local_records) > 0:
         df_local = pd.DataFrame(local_records)
-        df_local.to_csv('qc_local.csv', index=False)
+        df_local.to_csv('adaptive_local.csv', index=False)
         print(f"Saved {len(df_local)} local‐pose rows → qc_no_kalman_local.csv")
 
     if len(global_records) > 0:
         df_global = pd.DataFrame(global_records)
-        df_global.to_csv('qc_global.csv', index=False)
+        df_global.to_csv('adaptive_global.csv', index=False)
         print(f"Saved {len(df_global)} global‐pose rows → qc_no_kalman_global.csv")
 
 

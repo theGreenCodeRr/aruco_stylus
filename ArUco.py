@@ -69,6 +69,7 @@ def rvec_to_euler(rvec):
         yaw   = np.arctan2(-R[2,0], sy)
         roll  = np.arctan2(R[1,0], R[0,0])
     else:
+        # Gimbal lock
         pitch = np.arctan2(-R[1,2], R[1,1])
         yaw   = np.arctan2(-R[2,0], sy)
         roll  = 0
@@ -100,22 +101,6 @@ def main():
     # Prepare lists to log every pose
     local_records = []   # per-marker, per-frame local poses
     global_records = []  # per-frame global poses
-
-    # Initialize Kalman filter for global translation
-    kf = cv2.KalmanFilter(6, 3)
-    dt = 1.0 / fps if fps > 0 else 1.0
-    kf.transitionMatrix = np.array([
-        [1,0,0, dt,0, 0],
-        [0,1,0, 0, dt,0],
-        [0,0,1, 0, 0, dt],
-        [0,0,0, 1, 0, 0 ],
-        [0,0,0, 0, 1, 0 ],
-        [0,0,0, 0, 0, 1 ],
-    ], dtype=np.float32)
-    kf.measurementMatrix = np.hstack([np.eye(3), np.zeros((3,3))]).astype(np.float32)
-    kf.processNoiseCov = np.eye(6, dtype=np.float32) * 1e-4
-    kf.measurementNoiseCov = np.eye(3, dtype=np.float32) * 1e-2
-    kf.statePost = np.zeros((6,1), dtype=np.float32)
 
     # Seek to start_frame
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame - 1)
@@ -160,8 +145,7 @@ def main():
         cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
         img_pts, obj_pts = [], []
-        r_glob, t_raw = None, None
-        t_filt = None
+        r_glob, t_glob = None, None
 
         if ids is not None:
             for mid, corner in zip(ids.flatten(), corners):
@@ -204,20 +188,16 @@ def main():
                         img_pts.append(p2d)
                         obj_pts.append(p3d)
 
-        # Global pose estimation (Aruco + Kalman)
+        # Global pose estimation (plain Aruco)
         if len(obj_pts) >= 4:
-            r_glob, t_raw = estimatePoseGlobal(np.array(obj_pts), np.array(img_pts), cameraMatrix, distCoeffs)
-            # Kalman predict + correct on raw translation
-            kf.predict()
-            kf.correct(t_raw.astype(np.float32))
-            t_filt = kf.statePost[:3]
+            r_glob, t_glob = estimatePoseGlobal(np.array(obj_pts), np.array(img_pts), cameraMatrix, distCoeffs)
 
         # Draw global pose and trajectory on frame
-        if r_glob is not None and t_filt is not None:
-            cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, r_glob, t_filt, 0.05, global_thickness)
+        if r_glob is not None and t_glob is not None:
+            cv2.drawFrameAxes(frame, cameraMatrix, distCoeffs, r_glob, t_glob, 0.05, global_thickness)
 
             pitch_g, yaw_g, roll_g = rvec_to_euler(r_glob)
-            tx_g, ty_g, tz_g = t_filt.ravel().tolist()
+            tx_g, ty_g, tz_g = t_glob.ravel().tolist()
 
             # Log global pose using logged_frame
             global_records.append({
@@ -235,14 +215,14 @@ def main():
                         (width-300, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 1, cv2.LINE_AA)
 
             # Draw global trajectory directly on frame
-            og2d, _ = cv2.projectPoints(np.zeros((1,3)), r_glob, t_filt, cameraMatrix, distCoeffs)
+            og2d, _ = cv2.projectPoints(np.zeros((1,3)), r_glob, t_glob, cameraMatrix, distCoeffs)
             ptg = tuple(og2d.ravel().astype(int))
             global_origin_pts.append(ptg)
             for p0, p1 in zip(global_origin_pts, list(global_origin_pts)[1:]):
                 cv2.line(frame, p0, p1, (0,0,255), global_thickness)
 
         # Show frame directly (no overlay blending)
-        cv2.imshow('Aruco+Kalman Trajectories', frame)
+        cv2.imshow('Plain Aruco Trajectories', frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord(' '):      # pause / unpause
@@ -262,13 +242,13 @@ def main():
     # Save logs to CSV
     if len(local_records) > 0:
         df_local = pd.DataFrame(local_records)
-        df_local.to_csv('aruco_kalman_local.csv', index=False)
-        print(f"Saved {len(df_local)} local‐pose rows → aruco_kalman_local.csv")
+        df_local.to_csv('CSVs/aruco_local.csv', index=False)
+        print(f"Saved {len(df_local)} local‐pose rows → plain_aruco_local.csv")
 
     if len(global_records) > 0:
         df_global = pd.DataFrame(global_records)
-        df_global.to_csv('aruco_kalman_global.csv', index=False)
-        print(f"Saved {len(df_global)} global‐pose rows → aruco_kalman_global.csv")
+        df_global.to_csv('CSVs/aruco_global.csv', index=False)
+        print(f"Saved {len(df_global)} global‐pose rows → plain_aruco_global.csv")
 
 if __name__ == '__main__':
     main()
