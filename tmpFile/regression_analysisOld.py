@@ -204,7 +204,7 @@ print("Saved global angle regression summary to 'angle_regression_summary.csv'")
 # Per-Marker Local Translation + Angle Regression
 # ------------------------------------------
 # Load predicted local data from `plain_aruco_local.csv` (frame, marker_id, tx, ty, tz, roll, pitch, yaw)
-pred_local_file = '../plain_aruco_local.csv'
+pred_local_file = 'plain_aruco_local.csv'
 
 if not os.path.isfile(pred_local_file):
     print(f"Warning: '{pred_local_file}' not found. Skipping local regression.")
